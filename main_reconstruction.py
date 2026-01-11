@@ -230,12 +230,29 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     plt.pause(0.25)
     
     #%% LOCALISATION
-    Mwc_new = BA_LM_localization(
-        Mwc_guess,
+    
+    Xw = Uw[p3D_keys_to_ids[common_keys]]
+    local_p3D_keys_to_ids = np.arange(len(common_keys))
+    p_loc = [p[new_im_id]]
+    
+    tracks_loc = [{
+        'p3D_keys': local_p3D_keys_to_ids,
+        'p2D_ids': tracks_full[new_im_id]['p2D_ids'][idsNew][mask]
+    }]
+    
+    BA_loc = BA_LM_localization(
+        [Mwc_guess],
         Xw,
-        x2d,
-        K
+        local_p3D_keys_to_ids,
+        tracks_loc,
+        K,
+        p_loc
     )
+
+    BA_loc.optimize()
+    Mwc_new = BA_loc.getPoses()[0]
+    
+    print('Taille : ', Mwc_new.shape)
     
     Mwc.append(Mwc_new)
     
