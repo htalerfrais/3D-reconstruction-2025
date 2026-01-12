@@ -199,11 +199,11 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     Rwc_guess = Mwc_guess[:3, :3]
     twc_guess = Mwc_guess[:3, 3]
     
-    Xw = Uw[p3D_keys_to_ids[common_keys]]           #3D points in world
+    Xw = Uw[p3D_keys_to_ids[common_keys]]  #3D points in world ref common between new image and reconstructed 3D points
     x2d = p[new_im_id][tracks_full[new_im_id]['p2D_ids'][idsNew], :]        #corresponding 2D points
-    U_c = (Xw - twc_guess) @ Rwc_guess          #project to camera 
+    U_c = (Xw - twc_guess) @ Rwc_guess          # project 3D points to new camera referential
     
-    mask = U_c[:, 2] > 1e-6       #mask
+    mask = U_c[:, 2] > 1e-6       #mask to keep only points minimal distance front camera
     U_c = U_c[mask]             #apply mask
     Xw = Xw[mask]
     p_c_loc = x2d[mask]
@@ -232,8 +232,9 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     
     #%% LOCALISATION
     
-    idsNew = idsNew[mask]
-    p_loc = [p[new_im_id]]
+    idsNew = idsNew[mask]   # mask contains 3D points in new cam referential that are in front of cam
+    # idsNew contains the indices of the new image 3D points that are in commun with reconstructed
+    p_loc = [p[new_im_id]]  # contains the coordinates of all 2D points of new image 
     
     local_p3D_keys_to_ids = np.arange(len(Xw))
     
@@ -287,66 +288,116 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
 
     #%% TRIANGULATION of new 3D points
     
+    
     pass
     
     #find 3D keys points seen in the image new image that are not already reconstructed
+    # --- CONFIGURATION ---
+    min_parallax_angle = 2.0  # Seuil minimal en degrés pour accepter un point
+    new_points_3D = []
+    keys_actually_added = []
+    
+    # 1. Identifier les points orphelins (clés qui ne sont pas encore reconstruites)
     new_keys = np.setdiff1d(tracks_full[new_im_id]['p3D_keys'], p3D_keys_reconstructed)
     
-    print('Number of 3D points before adding new: {}'.format(len(Uw)))
+    # 2. Pré-calculer les centres des caméras et les matrices de projection
+    # Dans ton code, Mwc[cam][:3, 3] est le centre de la caméra dans le monde (C)
+    # et Mwc[cam][:3, :3] est la rotation Monde -> Caméra (R)
+    cams_centers = [m[:3, 3] for m in Mwc]
+    cams_P = [K @ np.hstack((m[:3, :3].T, (-m[:3, :3].T @ m[:3, 3]).reshape(3,1))) for m in Mwc]
     
-    cams_prev = range(len(Mwc)-1)
+    # 3. Créer une table d'inversion pour savoir quelle caméra a vu quelle clé (orpheline)
+    # Cela évite de boucler inutilement sur toutes les caméras pour chaque point
+    key_to_prev_cams = {key: [] for key in new_keys}
+    for cam_idx in range(new_im_id):
+        common = np.intersect1d(tracks_full[cam_idx]['p3D_keys'], new_keys)
+        for k in common:
+            key_to_prev_cams[k].append(cam_idx)
     
-    R_new = Mwc[-1][:3, :3]
-    t_new = Mwc[-1][:3, 3]
-
-    tracks_new = {'p3D_keys': [], 'p2D_ids': []}
+    # 4. Traitement point par point
+    C_new = cams_centers[new_im_id]
+    P_new = cams_P[new_im_id]
+    p_new_all = p[new_im_id] # Tous les points 2D de la nouvelle image
     
-    for cam in cams_prev:
-        R_prev = Mwc[cam][:3, :3]
-        t_prev = Mwc[cam][:3, 3]
-        
-        intersect, ids_prev, ids_new_cam = np.intersect1d(
-            tracks_full[cam]['p3D_keys'],                        # keys already reconstructed
-            new_keys,           # keys in new image
-            return_indices=True
-        )
-        
-        
-        if len(intersect) == 0:
+    for key in new_keys:
+        candidate_cams = key_to_prev_cams[key]
+        if len(candidate_cams) == 0:
             continue
-        
-        # Corresponding 2D points
-        p_prev = p[cam][tracks_full[cam]['p2D_ids'][ids_prev], :]
-        p_new = p[new_im_id][tracks_full[new_im_id]['p2D_ids'][ids_new_cam], :]
-        
-        P_prev = K @ np.hstack((R_prev, t_prev.reshape(3,1)))
-        P_new = K @ np.hstack((R_new, t_new.reshape(3,1)))
-        
-        U_hom = cv.triangulatePoints(P_prev, P_new, p_prev[:,:2].T, p_new[:,:2].T)
-        U_new = (U_hom[:3,:]/U_hom[3,:]).T
-        
-        # Append new points to 3D model
+    
+        best_angle = -1
+        best_U_world = None
+    
+        # On cherche la caméra passée qui donne le meilleur angle de parallaxe
+        for cam_prev_idx in candidate_cams:
+            C_prev = cams_centers[cam_prev_idx]
+            P_prev = cams_P[cam_prev_idx]
+    
+            # Récupérer les coordonnées 2D du point dans les deux images
+            # On utilise tracks_full pour trouver l'index du point 2D correspondant à la clé
+            
+            # Recherche de l'index 2D pour l'image actuelle
+            mask_new = (tracks_full[new_im_id]['p3D_keys'] == key)
+            idx_in_tracks_new = np.where(mask_new)[0][0]
+            idx_2d_new = tracks_full[new_im_id]['p2D_ids'][idx_in_tracks_new]
+            
+            # Recherche de l'index 2D pour l'image précédente (Correction ici : cam_prev_idx partout)
+            mask_prev = (tracks_full[cam_prev_idx]['p3D_keys'] == key)
+            idx_in_tracks_prev = np.where(mask_prev)[0][0]
+            idx_2d_prev = tracks_full[cam_prev_idx]['p2D_ids'][idx_in_tracks_prev]
+            
+            pt2d_new = p[new_im_id][idx_2d_new, :2]
+            pt2d_prev = p[cam_prev_idx][idx_2d_prev, :2]
+    
+            # Triangulation temporaire
+            U_hom = cv.triangulatePoints(P_prev, P_new, pt2d_prev.T, pt2d_new.T)
+            U_cand = (U_hom[:3] / U_hom[3]).flatten()
+    
+            # Calcul de l'angle de parallaxe
+            v1 = U_cand - C_new
+            v2 = U_cand - C_prev
+            
+            # Formule du cosinus
+            cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+            cos_theta = np.clip(cos_theta, -1.0, 1.0)
+            angle = np.degrees(np.arccos(cos_theta))
+    
+            if angle > best_angle:
+                best_angle = angle
+                best_U_world = U_cand
+    
+        # 5. Validation par seuil d'angle
+        if best_angle > min_parallax_angle:
+            new_points_3D.append(best_U_world)
+            keys_actually_added.append(key)
+    
+    # 6. Mise à jour massive du modèle 3D
+    if new_points_3D:
         n_Uw_before = Uw.shape[0]
-        Uw = np.vstack((Uw, U_new))
-    
-        # Update keys and mapping
-        for i, key in enumerate(intersect):
-            p3D_keys_to_ids[key] = n_Uw_before + i
-                
-        tracks_new['p3D_keys'].extend(intersect)
-        tracks_new['p2D_ids'].extend(ids_new_cam)
-    
-        # Remove these keys from future triangulation
-        new_keys = np.setdiff1d(new_keys, intersect)
+        Uw = np.vstack((Uw, np.array(new_points_3D)))
         
-    tracks.append({
-        'p3D_keys': np.array(tracks_new['p3D_keys']),
-        'p2D_ids': np.array(tracks_new['p2D_ids'])
-    })
+        for i, key in enumerate(keys_actually_added):
+            p3D_keys_to_ids[key] = n_Uw_before + i
+        
+        p3D_keys_reconstructed = np.union1d(p3D_keys_reconstructed, keys_actually_added)
+        
+        # Mise à jour des tracks pour la nouvelle image (uniquement les points validés)
+        # On reconstruit la structure pour l'ajouter à la liste 'tracks'
+        # Il faut retrouver les p2D_ids correspondants aux keys_actually_added
+        final_p2d_ids = []
+        for k in keys_actually_added:
+            idx = np.where(tracks_full[new_im_id]['p3D_keys'] == k)[0][0]
+            final_p2d_ids.append(tracks_full[new_im_id]['p2D_ids'][idx])
+            
+        tracks.append({
+            'p3D_keys': np.array(keys_actually_added),
+            'p2D_ids': np.array(final_p2d_ids)
+        })
+    else:
+        # Si aucun point n'est ajouté, on ajoute une structure vide pour garder la cohérence des indices
+        tracks.append({'p3D_keys': np.array([]), 'p2D_ids': np.array([])})
     
-    p3D_keys_reconstructed = np.union1d(p3D_keys_reconstructed, tracks[new_im_id]['p3D_keys'])
-
-    
+    print(f"Points orphelins : {len(new_keys)} | Triangulés avec succès : {len(new_points_3D)}")
+        
     #%% Bundle adjustment
     
     pass
