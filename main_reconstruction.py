@@ -186,7 +186,7 @@ plt.pause(0.1)
 fig6, axs6 = plt.subplots(ncols=2)
 fig6.suptitle('Current image : reproj error localization')
 
- 
+
 for new_im_id in range(2, len(im_names)):        #len(im_names)
     print('Image Index : ', new_im_id)
     #% Add image
@@ -229,16 +229,20 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     axs6[0].set_title('Loc. Init. Reproj. err. {0:0.2f} pix'.format(reproj_error))
     plt.pause(0.25)
     
+    
     #%% LOCALISATION
     
-    Xw = Uw[p3D_keys_to_ids[common_keys]]
-    local_p3D_keys_to_ids = np.arange(len(common_keys))
+    idsNew = idsNew[mask]
     p_loc = [p[new_im_id]]
+    
+    local_p3D_keys_to_ids = np.arange(len(Xw))
     
     tracks_loc = [{
         'p3D_keys': local_p3D_keys_to_ids,
-        'p2D_ids': tracks_full[new_im_id]['p2D_ids'][idsNew][mask]
+        'p2D_ids': tracks_full[new_im_id]['p2D_ids'][idsNew]
     }]
+    
+    assert len(Xw) == len(tracks_loc[0]['p2D_ids'])
     
     BA_loc = BA_LM_localization(
         [Mwc_guess],
@@ -250,9 +254,10 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     )
 
     BA_loc.optimize()
-    Mwc_new = BA_loc.getPoses()[0]
+    Uw_new = BA_loc.getPointCloud()
+    assert(np.allclose(Xw, Uw_new))
     
-    print('Taille : ', Mwc_new.shape)
+    Mwc_new = BA_loc.getPoses()[0]
     
     Mwc.append(Mwc_new)
     
@@ -283,11 +288,64 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     #%% TRIANGULATION of new 3D points
     
     pass
+    
     #find 3D keys points seen in the image new image that are not already reconstructed
+    new_keys = np.setdiff1d(tracks_full[new_im_id]['p3D_keys'], p3D_keys_reconstructed)
     
     print('Number of 3D points before adding new: {}'.format(len(Uw)))
+    
+    cams_prev = range(len(Mwc)-1)
+    
+    R_new = Mwc[-1][:3, :3]
+    t_new = Mwc[-1][:3, 3]
+
+    tracks_new = {'p3D_keys': [], 'p2D_ids': []}
+    
+    for cam in cams_prev:
+        R_prev = Mwc[cam][:3, :3]
+        t_prev = Mwc[cam][:3, 3]
         
-    #tracks.append(tracks_new)
+        intersect, ids_prev, ids_new_cam = np.intersect1d(
+            tracks_full[cam]['p3D_keys'],                        # keys already reconstructed
+            new_keys,           # keys in new image
+            return_indices=True
+        )
+        
+        
+        if len(intersect) == 0:
+            continue
+        
+        # Corresponding 2D points
+        p_prev = p[cam][tracks_full[cam]['p2D_ids'][ids_prev], :]
+        p_new = p[new_im_id][tracks_full[new_im_id]['p2D_ids'][ids_new_cam], :]
+        
+        P_prev = K @ np.hstack((R_prev, t_prev.reshape(3,1)))
+        P_new = K @ np.hstack((R_new, t_new.reshape(3,1)))
+        
+        U_hom = cv.triangulatePoints(P_prev, P_new, p_prev[:,:2].T, p_new[:,:2].T)
+        U_new = (U_hom[:3,:]/U_hom[3,:]).T
+        
+        # Append new points to 3D model
+        n_Uw_before = Uw.shape[0]
+        Uw = np.vstack((Uw, U_new))
+    
+        # Update keys and mapping
+        for i, key in enumerate(intersect):
+            p3D_keys_to_ids[key] = n_Uw_before + i
+                
+        tracks_new['p3D_keys'].extend(intersect)
+        tracks_new['p2D_ids'].extend(ids_new_cam)
+    
+        # Remove these keys from future triangulation
+        new_keys = np.setdiff1d(new_keys, intersect)
+        
+    tracks.append({
+        'p3D_keys': np.array(tracks_new['p3D_keys']),
+        'p2D_ids': np.array(tracks_new['p2D_ids'])
+    })
+    
+    p3D_keys_reconstructed = np.union1d(p3D_keys_reconstructed, tracks[new_im_id]['p3D_keys'])
+
     
     #%% Bundle adjustment
     
