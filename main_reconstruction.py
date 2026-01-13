@@ -269,6 +269,8 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     p_c_loc_pred = (U_c / U_c[:, 2:3]) @ K.T
     p_c_loc_pred = p_c_loc_pred[:, :2]
     
+    assert(np.all(U_c[:,2] > 0.))
+    
     reproj_error = np.mean(
         np.linalg.norm(p_c_loc_pred - p_c_loc, axis=1)
     )
@@ -288,12 +290,10 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
 
     #%% TRIANGULATION of new 3D points
     
-    
-    pass
-    
+    #pass
     #find 3D keys points seen in the image new image that are not already reconstructed
     # --- CONFIGURATION ---
-    min_parallax_angle = 2.0  # Seuil minimal en degrés pour accepter un point
+    min_parallax_angle = 5.0  # Seuil minimal en degrés pour accepter un point
     new_points_3D = []
     keys_actually_added = []
     
@@ -400,7 +400,21 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
         
     #%% Bundle adjustment
     
-    pass
+    #pass
+    BA_global = BA_LM_schur(
+        Mwc, 
+        Uw, 
+        p3D_keys_to_ids, 
+        tracks, 
+        K, 
+        p, 
+        maxIt=25 # Reduced iterations for real-time feedback; increase for higher precision
+    )
+
+    BA_global.optimize()
+    Mwc = BA_global.getPoses()
+    Uw = BA_global.getPointCloud()
+    
     Mwc, Uw = utils.normalizeReconstructionScale(Mwc,Uw)
     
 #%% Save reconstruction

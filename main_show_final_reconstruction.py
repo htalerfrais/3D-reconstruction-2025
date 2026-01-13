@@ -44,22 +44,22 @@ track_length = np.zeros((Uw.shape[0]))
 for cam in range(len(Mwc)):
     Mwc_cur = Mwc[cam]
     U_c = (Uw[p3D_keys_to_ids[tracks[cam]['p3D_keys']],:] - Mwc_cur[:3,3])@Mwc_cur[:3,:3]
-    p_c_pred = ((U_c/U_c[:,2:3]) @ K.T).astype(int)    
+    p_c_pred = ((U_c/U_c[:,2:3]) @ K.T).astype(int)   
     
     colors_U[p3D_keys_to_ids[tracks[cam]['p3D_keys']],:] = (I[cam][p_c_pred[:,1],p_c_pred[:,0],:])
     track_length[p3D_keys_to_ids[tracks[cam]['p3D_keys']]] += 1
 
 #%% Remove 3D points that are too far from the origin and have a small track length
-mask_Uw = (np.sqrt((Uw**2).sum(axis=1))<30) * (track_length >= track_length_min)
-Uw_masked = Uw[mask_Uw,:]
-colors_U_masked = colors_U[mask_Uw,:]
+#mask_Uw = (np.sqrt((Uw**2).sum(axis=1))<30) * (track_length >= track_length_min)
+#Uw_masked = Uw[mask_Uw,:]
+#colors_U_masked = colors_U[mask_Uw,:]
 
 #%% Visualize
 Mcw = [np.linalg.inv(M) for M in Mwc]
 K_list = [K]*len(Mcw)
 viewer = viewer.Viewer()
 line_set_list, frame_list, Rwc_viz_list, twc_viz_list = viewer.drawCameras(K_list, I, Mcw, color_first=True, show_imgs=True, cam_colors=None, size=0.2)
-viewer.drawPointCloud(Uw_masked, colors_U_masked)
+viewer.drawPointCloud(Uw, colors_U)
 
 viewer.run()
     
