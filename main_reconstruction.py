@@ -290,23 +290,24 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
 
     #%% TRIANGULATION of new 3D points
     
-    #pass
-    #find 3D keys points seen in the image new image that are not already reconstructed
+    # pour chaque point à reconstruire, on va sélectionner la meilleure caméra à partir de laquelle faire la triangulation
+    
+    # find 3D keys points seen in the image new image that are not already reconstructed
     # --- CONFIGURATION ---
     min_parallax_angle = 5.0  # Seuil minimal en degrés pour accepter un point
     new_points_3D = []
     keys_actually_added = []
     
-    # 1. Identifier les points orphelins (clés qui ne sont pas encore reconstruites)
+    # Identifier les points orphelins (clés qui ne sont pas encore reconstruites)
     new_keys = np.setdiff1d(tracks_full[new_im_id]['p3D_keys'], p3D_keys_reconstructed)
     
-    # 2. Pré-calculer les centres des caméras et les matrices de projection
-    # Dans ton code, Mwc[cam][:3, 3] est le centre de la caméra dans le monde (C)
-    # et Mwc[cam][:3, :3] est la rotation Monde -> Caméra (R)
+    # Pré-calculer les centres des caméras et les matrices de projection
+    # Mwc[cam][:3, 3] centre de la caméra dans le monde (C)
+    # Mwc[cam][:3, :3] est la rotation Monde vers Caméra (R)
     cams_centers = [m[:3, 3] for m in Mwc]
     cams_P = [K @ np.hstack((m[:3, :3].T, (-m[:3, :3].T @ m[:3, 3]).reshape(3,1))) for m in Mwc]
     
-    # 3. Créer une table d'inversion pour savoir quelle caméra a vu quelle clé (orpheline)
+    # Créer une table d'inversion pour savoir quelle caméra a vu quelle clé (orpheline)
     # Cela évite de boucler inutilement sur toutes les caméras pour chaque point
     key_to_prev_cams = {key: [] for key in new_keys}
     for cam_idx in range(new_im_id):
@@ -314,13 +315,13 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
         for k in common:
             key_to_prev_cams[k].append(cam_idx)
     
-    # 4. Traitement point par point
+    # Traitement point par point
     C_new = cams_centers[new_im_id]
     P_new = cams_P[new_im_id]
     p_new_all = p[new_im_id] # Tous les points 2D de la nouvelle image
     
     for key in new_keys:
-        candidate_cams = key_to_prev_cams[key]
+        candidate_cams = key_to_prev_cams[key] # on présélectionne les caméras ayant vu le point 3D à reconstruire
         if len(candidate_cams) == 0:
             continue
     
@@ -336,19 +337,20 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
             # On utilise tracks_full pour trouver l'index du point 2D correspondant à la clé
             
             # Recherche de l'index 2D pour l'image actuelle
-            mask_new = (tracks_full[new_im_id]['p3D_keys'] == key)
-            idx_in_tracks_new = np.where(mask_new)[0][0]
+            mask_new = (tracks_full[new_im_id]['p3D_keys'] == key) #key : le point 3D qu'on cherche a reconstruire
+            idx_in_tracks_new = np.where(mask_new)[0][0] 
             idx_2d_new = tracks_full[new_im_id]['p2D_ids'][idx_in_tracks_new]
             
-            # Recherche de l'index 2D pour l'image précédente (Correction ici : cam_prev_idx partout)
+            # Recherche de l'index 2D pour l'image précédente
             mask_prev = (tracks_full[cam_prev_idx]['p3D_keys'] == key)
             idx_in_tracks_prev = np.where(mask_prev)[0][0]
             idx_2d_prev = tracks_full[cam_prev_idx]['p2D_ids'][idx_in_tracks_prev]
             
+            # une fois qu'on a les indexes on récupère les coordonnées :
             pt2d_new = p[new_im_id][idx_2d_new, :2]
             pt2d_prev = p[cam_prev_idx][idx_2d_prev, :2]
     
-            # Triangulation temporaire
+            # Triangulation temporaire (pour calculer l'angle entre les caméras)
             U_hom = cv.triangulatePoints(P_prev, P_new, pt2d_prev.T, pt2d_new.T)
             U_cand = (U_hom[:3] / U_hom[3]).flatten()
     
@@ -356,7 +358,7 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
             v1 = U_cand - C_new
             v2 = U_cand - C_prev
             
-            # Formule du cosinus
+            # Calcul de l'angle entre les caméras 
             cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
             cos_theta = np.clip(cos_theta, -1.0, 1.0)
             angle = np.degrees(np.arccos(cos_theta))
@@ -365,12 +367,13 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
                 best_angle = angle
                 best_U_world = U_cand
     
-        # 5. Validation par seuil d'angle
+        #  Validation par seuil d'angle
         if best_angle > min_parallax_angle:
             new_points_3D.append(best_U_world)
             keys_actually_added.append(key)
     
-    # 6. Mise à jour massive du modèle 3D
+    
+    # Mise à jour du modèle 3D avec les points reconstruits par triangulation
     if new_points_3D:
         n_Uw_before = Uw.shape[0]
         Uw = np.vstack((Uw, np.array(new_points_3D)))
@@ -400,7 +403,6 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
         
     #%% Bundle adjustment
     
-    #pass
     BA_global = BA_LM_schur(
         Mwc, 
         Uw, 
