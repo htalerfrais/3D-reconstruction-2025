@@ -25,8 +25,11 @@ with open('data_ready.pkl', 'rb') as f:
     
     p3D_keys_to_ids = np.array(pickle.load(f))
     
+t0 = time.time()
 
 #%% INITIALISATION - Start from first two images
+
+reproj_err_list = []
 
 imA_id = 0
 imB_id = 1
@@ -172,7 +175,7 @@ for cam in range(nCam):
     assert(np.all(U_c[:,2] > 0.)) #all 3D points observed in an image should have positive depth
     
     reproj_error = (1/p_c_pred.shape[0])*np.sqrt(((p_c_pred[:,:2] - p_c)**2).sum(axis=1)).sum()
-    
+    reproj_err_list.append(reproj_error)
     
     axs5[cam].imshow(I[cam])
     axs5[cam].scatter(p_c[:,0], p_c[:,1], marker ='o', facecolors='none', edgecolors='r')
@@ -218,7 +221,7 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     I.append(I_c) # store new image for visualization and debug
     
     reproj_error = (1/p_c_loc_pred.shape[0])*np.sqrt(((p_c_loc_pred[:,:2] - p_c_loc)**2).sum(axis=1)).sum()
-    
+
     #Visualize reprojection error before localization
     axs6[0].clear()
     plt.pause(0.1)
@@ -233,7 +236,7 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     #%% LOCALISATION
     
     idsNew = idsNew[mask]   # mask contains 3D points in new cam referential that are in front of cam
-    # idsNew contains the indices of the new image 3D points that are in commun with reconstructed
+    # idsNew contains the indices of the new image 3D points that are in common with reconstructed
     p_loc = [p[new_im_id]]  # contains the coordinates of all 2D points of new image 
     
     local_p3D_keys_to_ids = np.arange(len(Xw))
@@ -274,9 +277,10 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     reproj_error = np.mean(
         np.linalg.norm(p_c_loc_pred - p_c_loc, axis=1)
     )
+    reproj_err_list.append(reproj_error)
     
     print(f"Localization reprojection error: {reproj_error:.2f} px")
-     
+         
     #Visualize reprojection error after localization
     axs6[1].clear()
     plt.pause(0.1)
@@ -293,7 +297,7 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     
     # find 3D keys points seen in the image new image that are not already reconstructed
     # --- CONFIGURATION ---
-    min_parallax_angle = 5.0  # Seuil minimal en degrés pour accepter un point
+    min_parallax_angle = 0  # Seuil minimal en degrés pour accepter un point
     new_points_3D = []
     keys_actually_added = []
     
@@ -418,6 +422,12 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     Uw = BA_global.getPointCloud()
     
     Mwc, Uw = utils.normalizeReconstructionScale(Mwc,Uw)
+    
+print('Total time : {} sec'.format(time.time()-t0))
+print('Mean mean reproj. error : {} pix'.format(np.mean(reproj_err_list)))
+print('Max mean reproj. error : {} pix'.format(np.max(reproj_err_list)))
+print('Min mean reproj. error : {} pix'.format(np.min(reproj_err_list)))
+
     
 #%% Save reconstruction
 with open('final_reconstruction.pkl', 'wb') as f:

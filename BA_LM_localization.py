@@ -161,9 +161,9 @@ class BA_LM_localization():
             d = self.b_P - self.H_PU_H_UU_plus_lambda_inv @ self.b_U
             delta_P = sp.linalg.solve(A, d,assume_a='sym')
             
-            delta_U = np.zeros((3*self.nP3D))
-            for i in range(self.nP3D):
-                delta_U[3*i:3*(i+1)] = self.H_UU_plus_lambda_inv[i,:,:]@(self.b_U[3*i:3*(i+1)] - self.H_UP[3*i:3*(i+1),:]@delta_P) 
+            #delta_U = np.zeros((3*self.nP3D))
+            #for i in range(self.nP3D):
+                #delta_U[3*i:3*(i+1)] = self.H_UU_plus_lambda_inv[i,:,:]@(self.b_U[3*i:3*(i+1)] - self.H_UP[3*i:3*(i+1),:]@delta_P) 
             
             #update variables
             #Uw_prev = self.Uw.copy()
@@ -198,7 +198,7 @@ class BA_LM_localization():
     
     def optimize(self, early_bailout=0):
         
-        print('START BA LM SCHUR')
+        print('START BA LM LOCALIZATION')
         #compute inital cost
         c = self.compute_cost()
     
