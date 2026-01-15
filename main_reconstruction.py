@@ -378,14 +378,13 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
         n_Uw_before = Uw.shape[0]
         Uw = np.vstack((Uw, np.array(new_points_3D)))
         
+        # on relie la clée 3D des points ajoutés à leur id dans Uw (coordonnées des points 3D de la scene)
         for i, key in enumerate(keys_actually_added):
             p3D_keys_to_ids[key] = n_Uw_before + i
         
         p3D_keys_reconstructed = np.union1d(p3D_keys_reconstructed, keys_actually_added)
         
-        # Mise à jour des tracks pour la nouvelle image (uniquement les points validés)
-        # On reconstruit la structure pour l'ajouter à la liste 'tracks'
-        # Il faut retrouver les p2D_ids correspondants aux keys_actually_added
+        # Mise à jour des tracks pour la nouvelle image (pour les points validés)
         final_p2d_ids = []
         for k in keys_actually_added:
             idx = np.where(tracks_full[new_im_id]['p3D_keys'] == k)[0][0]
@@ -396,7 +395,7 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
             'p2D_ids': np.array(final_p2d_ids)
         })
     else:
-        # Si aucun point n'est ajouté, on ajoute une structure vide pour garder la cohérence des indices
+        # Si aucun point n'est ajouté, pour garantir que lea taille de tracks reste égale au nb de caméras traitées.
         tracks.append({'p3D_keys': np.array([]), 'p2D_ids': np.array([])})
     
     print(f"Points orphelins : {len(new_keys)} | Triangulés avec succès : {len(new_points_3D)}")
