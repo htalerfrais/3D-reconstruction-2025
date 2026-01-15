@@ -297,7 +297,7 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
     
     # find 3D keys points seen in the image new image that are not already reconstructed
     # --- CONFIGURATION ---
-    min_parallax_angle = 0  # Seuil minimal en degrés pour accepter un point
+    min_parallax_angle = 5.0  # Seuil minimal en degrés pour accepter un point
     new_points_3D = []
     keys_actually_added = []
     
@@ -414,13 +414,13 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
         tracks, 
         K, 
         p, 
-        maxIt=25 # Reduced iterations for real-time feedback; increase for higher precision
+    maxIt=20 # Reduced iterations for real-time feedback; increase for higher precision
     )
 
     BA_global.optimize()
     Mwc = BA_global.getPoses()
     Uw = BA_global.getPointCloud()
-    
+        
     Mwc, Uw = utils.normalizeReconstructionScale(Mwc,Uw)
     
 print('Total time : {} sec'.format(time.time()-t0))
