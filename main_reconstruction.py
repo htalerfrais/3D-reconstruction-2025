@@ -377,36 +377,26 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
         n_Uw_before = Uw.shape[0]
         Uw = np.vstack((Uw, np.array(new_points_3D)))
         
-        # Mettre à jour le mapping global
         for i, key in enumerate(keys_actually_added):
             p3D_keys_to_ids[key] = n_Uw_before + i
         
         p3D_keys_reconstructed = np.union1d(p3D_keys_reconstructed, keys_actually_added)
-    
-        # Mettre à jour les tracks de toutes les caméras
-        for cam_idx in range(new_im_id + 1):  # Inclut les anciennes et la nouvelle
-            # Trouver quelles clés parmi celles ajoutées sont vues par cette caméra
-            keys_seen_by_cam, ids_in_added, ids_in_full = np.intersect1d(
-                keys_actually_added, 
-                tracks_full[cam_idx]['p3D_keys'], 
-                return_indices=True
-            )
+        
+        # Mise à jour des tracks pour la nouvelle image (uniquement les points validés)
+        # On reconstruit la structure pour l'ajouter à la liste 'tracks'
+        # Il faut retrouver les p2D_ids correspondants aux keys_actually_added
+        final_p2d_ids = []
+        for k in keys_actually_added:
+            idx = np.where(tracks_full[new_im_id]['p3D_keys'] == k)[0][0]
+            final_p2d_ids.append(tracks_full[new_im_id]['p2D_ids'][idx])
             
-            if len(keys_seen_by_cam) > 0:
-                new_p2d_ids = tracks_full[cam_idx]['p2D_ids'][ids_in_full]
-                
-                if cam_idx < len(tracks):
-                    # On ajoute les nouvelles clés aux tracks existants de l'ancienne caméra
-                    tracks[cam_idx]['p3D_keys'] = np.append(tracks[cam_idx]['p3D_keys'], keys_seen_by_cam)
-                    tracks[cam_idx]['p2D_ids'] = np.append(tracks[cam_idx]['p2D_ids'], new_p2d_ids)
-                else:
-                    # C'est la nouvelle caméra, on crée son premier track
-                    tracks.append({
-                        'p3D_keys': keys_seen_by_cam,
-                        'p2D_ids': new_p2d_ids
-                    })
+        tracks.append({
+            'p3D_keys': np.array(keys_actually_added),
+            'p2D_ids': np.array(final_p2d_ids)
+        })
+        
     else:
-        # Si aucun point n'est ajouté, pour garantir que lea taille de tracks reste égale au nb de caméras traitées.
+        # Si aucun point n'est ajouté, on ajoute une structure vide pour garder la cohérence des indices
         tracks.append({'p3D_keys': np.array([]), 'p2D_ids': np.array([])})
     
     print(f"Points orphelins : {len(new_keys)} | Triangulés avec succès : {len(new_points_3D)}")
