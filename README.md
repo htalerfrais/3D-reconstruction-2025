@@ -121,9 +121,12 @@ The pipeline successfully reconstructs the 3D scene with:
 - Robust camera trajectory estimation
 - Dense point cloud with multi-view consistency
 
+## View 3D points
+In order to visualise the final_reconstruction.pkl you will have to install Open3D dependencies which are not part of the provided conda environment.
+
 ## Authors
 
-- Hector (ENSEIRB-MATMECA, S9 2024-2025)
+- Hector Taler-Fraisse and Maxime Hurtubise, ENSEIRB-MATMECA 2025
 
 ## Acknowledgments
 
