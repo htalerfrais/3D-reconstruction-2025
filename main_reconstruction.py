@@ -30,6 +30,7 @@ t0 = time.time()
 #%% INITIALISATION - Start from first two images
 
 reproj_err_list = []
+reproj_err_global_ba_list = []
 
 imA_id = 0
 imB_id = 1
@@ -433,10 +434,18 @@ for new_im_id in range(2, len(im_names)):        #len(im_names)
         
     Mwc, Uw = utils.normalizeReconstructionScale(Mwc,Uw)
     
+    # Reprojection error after global BA
+    global_ba_rmse = BA_global.compute_cost()
+    print(f"[Image {new_im_id}] Global BA RMSE: {global_ba_rmse:.4f} pix")
+    reproj_err_global_ba_list.append(global_ba_rmse)
+
 print('Total time : {} sec'.format(time.time()-t0))
-print('Mean mean reproj. error : {} pix'.format(np.mean(reproj_err_list)))
-print('Max mean reproj. error : {} pix'.format(np.max(reproj_err_list)))
-print('Min mean reproj. error : {} pix'.format(np.min(reproj_err_list)))
+print('Localization - Mean reproj. error : {:.4f} pix'.format(np.mean(reproj_err_list)))
+print('Localization - Max  reproj. error : {:.4f} pix'.format(np.max(reproj_err_list)))
+print('Localization - Min  reproj. error : {:.4f} pix'.format(np.min(reproj_err_list)))
+print('Global BA   - Mean RMSE : {:.4f} pix'.format(np.mean(reproj_err_global_ba_list)))
+print('Global BA   - Max  RMSE : {:.4f} pix'.format(np.max(reproj_err_global_ba_list)))
+print('Global BA   - Min  RMSE : {:.4f} pix'.format(np.min(reproj_err_global_ba_list)))
 
     
 #%% Save reconstruction
